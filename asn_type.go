@@ -28,8 +28,12 @@ type ObjectIdentifier []byte
 type Enumerated uint64
 
 var (
-	BitStringType        = reflect.TypeOf(BitString{})
-	OctetStringType      = reflect.TypeOf(OctetString{})
+	// BitStringType is the type of BitString
+	BitStringType = reflect.TypeOf(BitString{})
+	// OctetStringType is the type of OctetString
+	OctetStringType = reflect.TypeOf(OctetString{})
+	// ObjectIdentifierType is the type of ObjectIdentify
 	ObjectIdentifierType = reflect.TypeOf(ObjectIdentifier{})
-	EnumeratedType       = reflect.TypeOf(Enumerated(0))
+	// EnumeratedType is the type of Enumerated
+	EnumeratedType = reflect.TypeOf(Enumerated(0))
 )

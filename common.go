@@ -74,5 +74,5 @@ func parseFieldParameters(str string) (params fieldParameters) {
 			}
 		}
 	}
-	return
+	return params
 }

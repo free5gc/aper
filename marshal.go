@@ -139,7 +139,8 @@ func (pd *perRawBitData) appendLength(sizeRange int64, value uint64) (err error)
 	return
 }
 
-func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extensive bool, lowerBoundPtr *int64, upperBoundPtr *int64) (err error) {
+func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extensive bool,
+	lowerBoundPtr *int64, upperBoundPtr *int64) (err error) {
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if lowerBoundPtr != nil {
 		lb = *lowerBoundPtr
@@ -152,15 +153,15 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 				return
 			}
 			if extensive {
-				perTrace(2, fmt.Sprintf("Putting size Extension Value"))
+				perTrace(2, "Putting size Extension Value")
 				if sizeRange == -1 {
-					if err := pd.putBitsValue(1, 1); err != nil {
-						log.Printf("putBitsValue(1, 1) error: %v", err)
+					if errTmp := pd.putBitsValue(1, 1); errTmp != nil {
+						log.Printf("putBitsValue(1, 1) error: %v", errTmp)
 					}
 					lb = 0
 				} else {
-					if err := pd.putBitsValue(0, 1); err != nil {
-						log.Printf("putBitsValue(0, 1) error: %v", err)
+					if errTmp := pd.putBitsValue(0, 1); errTmp != nil {
+						log.Printf("putBitsValue(0, 1) error: %v", errTmp)
 					}
 				}
 			}
@@ -216,7 +217,8 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 		pd.appendAlignBits()
 		pd.bytes = append(pd.bytes, bytes[byteOffset:byteOffset+sizes]...)
 		perTrace(1, perRawBitLog(partOfRawLength, len(pd.bytes), pd.bitsOffset, bytes))
-		perTrace(2, fmt.Sprintf("Encoded BIT STRING (length = %d): 0x%0x", partOfRawLength, bytes[byteOffset:byteOffset+sizes]))
+		perTrace(2, fmt.Sprintf("Encoded BIT STRING (length = %d): 0x%0x", partOfRawLength,
+			bytes[byteOffset:byteOffset+sizes]))
 		rawLength -= (partOfRawLength - uint64(lb))
 		if rawLength > 0 {
 			byteOffset += sizes
@@ -226,11 +228,12 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 			break
 		}
 	}
-	return
+	return err
 
 }
 
-func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBoundPtr *int64, upperBoundPtr *int64) (err error) {
+func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBoundPtr *int64,
+	upperBoundPtr *int64) error {
 	byteLen := uint64(len(bytes))
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if lowerBoundPtr != nil {
@@ -240,19 +243,19 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 			if byteLen <= uint64(ub) {
 				sizeRange = ub - lb + 1
 			} else if !extensive {
-				err = fmt.Errorf("OctetString Length is over upperbound")
-				return
+				err := fmt.Errorf("OctetString Length is over upperbound")
+				return err
 			}
 			if extensive {
-				perTrace(2, fmt.Sprintf("Putting size Extension Value"))
+				perTrace(2, "Putting size Extension Value")
 				if sizeRange == -1 {
-					if err := pd.putBitsValue(1, 1); err != nil {
-						log.Printf("putBitsValue(1, 1) err: %v", err)
+					if errTmp := pd.putBitsValue(1, 1); errTmp != nil {
+						log.Printf("putBitsValue(1, 1) err: %v", errTmp)
 					}
 					lb = 0
 				} else {
-					if err := pd.putBitsValue(0, 1); err != nil {
-						log.Printf("putBitsValue(0, 1) err: %v", err)
+					if errTmp := pd.putBitsValue(0, 1); errTmp != nil {
+						log.Printf("putBitsValue(0, 1) err: %v", errTmp)
 					}
 				}
 			}
@@ -266,7 +269,8 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 
 	if sizeRange == 1 {
 		if byteLen != uint64(ub) {
-			err = fmt.Errorf("OctetString Length(%d) is not match fix-sized : %d", byteLen, ub)
+			err := fmt.Errorf("OctetString Length(%d) is not match fix-sized : %d", byteLen, ub)
+			return err
 		}
 		perTrace(2, fmt.Sprintf("Encoding OCTET STRING size %d", ub))
 		if byteLen > 2 {
@@ -274,10 +278,11 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 			pd.bytes = append(pd.bytes, bytes...)
 			perTrace(1, perRawBitLog(byteLen*8, len(pd.bytes), 0, bytes))
 		} else {
-			err = pd.putBitString(bytes, uint(byteLen*8))
+			err := pd.putBitString(bytes, uint(byteLen*8))
+			return err
 		}
 		perTrace(2, fmt.Sprintf("Encoded OCTET STRING (length = %d): 0x%0x", byteLen, bytes))
-		return
+		return nil
 	}
 	rawLength := byteLen - uint64(lb)
 
@@ -290,18 +295,19 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 		} else {
 			partOfRawLength = rawLength
 		}
-		if err = pd.appendLength(sizeRange, partOfRawLength); err != nil {
-			return
+		if err := pd.appendLength(sizeRange, partOfRawLength); err != nil {
+			return err
 		}
 		partOfRawLength += uint64(lb)
 		perTrace(2, fmt.Sprintf("Encoding OCTET STRING size %d", partOfRawLength))
 		if partOfRawLength == 0 {
-			return
+			return nil
 		}
 		pd.appendAlignBits()
 		pd.bytes = append(pd.bytes, bytes[byteOffset:byteOffset+partOfRawLength]...)
 		perTrace(1, perRawBitLog(partOfRawLength*8, len(pd.bytes), pd.bitsOffset, bytes))
-		perTrace(2, fmt.Sprintf("Encoded OCTET STRING (length = %d): 0x%0x", partOfRawLength, bytes[byteOffset:byteOffset+partOfRawLength]))
+		perTrace(2, fmt.Sprintf("Encoded OCTET STRING (length = %d): 0x%0x", partOfRawLength,
+			bytes[byteOffset:byteOffset+partOfRawLength]))
 		rawLength -= (partOfRawLength - uint64(lb))
 		if rawLength > 0 {
 			byteOffset += partOfRawLength
@@ -310,7 +316,7 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 			break
 		}
 	}
-	return
+	return nil
 
 }
 
@@ -318,42 +324,40 @@ func (pd *perRawBitData) appendBool(value bool) (err error) {
 	perTrace(3, fmt.Sprintf("Encoding BOOLEAN Value %t", value))
 	if value {
 		err = pd.putBitsValue(1, 1)
-		perTrace(2, fmt.Sprintf("Encoded BOOLEAN Value : 0x1"))
+		perTrace(2, "Encoded BOOLEAN Value : 0x1")
 	} else {
 		err = pd.putBitsValue(0, 1)
-		perTrace(2, fmt.Sprintf("Encoded BOOLEAN Value : 0x0"))
+		perTrace(2, "Encoded BOOLEAN Value : 0x0")
 	}
 	return
 }
 
-func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPtr *int64, upperBoundPtr *int64) (err error) {
+func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPtr *int64, upperBoundPtr *int64) error {
 	var lb, valueRange int64 = 0, 0
 	if lowerBoundPtr != nil {
 		lb = *lowerBoundPtr
 		if value < lb {
-			err = fmt.Errorf("INTEGER value is smaller than lowerbound")
-			return
+			return fmt.Errorf("INTEGER value is smaller than lowerbound")
 		}
 		if upperBoundPtr != nil {
 			ub := *upperBoundPtr
 			if value <= ub {
 				valueRange = ub - lb + 1
 			} else if !extensive {
-				err = fmt.Errorf("INTEGER value is larger than upperbound")
-				return
+				return fmt.Errorf("INTEGER value is larger than upperbound")
 			}
 			if extensive {
-				perTrace(2, fmt.Sprintf("Putting value Extension bit"))
+				perTrace(2, "Putting value Extension bit")
 				if valueRange == 0 {
-					perTrace(3, fmt.Sprintf("Encoding INTEGER with Unconstraint Value"))
+					perTrace(3, "Encoding INTEGER with Unconstraint Value")
 					valueRange = -1
-					if err := pd.putBitsValue(1, 1); err != nil {
-						fmt.Printf("pd.putBitsValue(1, 1) error: %v", err)
+					if errTmp := pd.putBitsValue(1, 1); errTmp != nil {
+						fmt.Printf("pd.putBitsValue(1, 1) error: %v", errTmp)
 					}
 				} else {
 					perTrace(3, fmt.Sprintf("Encoding INTEGER with Value Range(%d..%d)", lb, ub))
-					if err := pd.putBitsValue(0, 1); err != nil {
-						fmt.Printf("pd.putBitsValue(0, 1) error: %v", err)
+					if errTmp := pd.putBitsValue(0, 1); errTmp != nil {
+						fmt.Printf("pd.putBitsValue(0, 1) error: %v", errTmp)
 					}
 				}
 			}
@@ -362,16 +366,16 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 			perTrace(3, fmt.Sprintf("Encoding INTEGER with Semi-Constraint Range(%d..)", lb))
 		}
 	} else {
-		perTrace(3, fmt.Sprintf("Encoding INTEGER with Unconstraint Value"))
+		perTrace(3, "Encoding INTEGER with Unconstraint Value")
 		valueRange = -1
 	}
 
 	unsignedValue := uint64(value)
 	var rawLength uint
 	if valueRange == 1 {
-		perTrace(2, fmt.Sprintf("Value of INTEGER is fixed"))
+		perTrace(2, "Value of INTEGER is fixed")
 
-		return
+		return nil
 	}
 	if value < 0 {
 		y := value >> 63
@@ -380,8 +384,7 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 	if valueRange <= 0 {
 		unsignedValue >>= 7
 	} else if valueRange <= 65536 {
-		err = pd.appendConstraintValue(valueRange, uint64(value-lb))
-		return
+		return pd.appendConstraintValue(valueRange, uint64(value-lb))
 	} else {
 		unsignedValue >>= 8
 	}
@@ -418,8 +421,8 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 			}
 		}
 		perTrace(2, fmt.Sprintf("Encoding INTEGER Length %d-1 in %d bits", rawLength, i))
-		if err = pd.putBitsValue(uint64(rawLength-1), i); err != nil {
-			return
+		if err := pd.putBitsValue(uint64(rawLength-1), i); err != nil {
+			return err
 		}
 	}
 	perTrace(2, fmt.Sprintf("Encoding INTEGER %d with %d bytes", value, rawLength))
@@ -429,49 +432,45 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 
 	if valueRange < 0 {
 		mask := int64(1<<rawLength - 1)
-		err = pd.putBitsValue(uint64(value&mask), rawLength)
+		return pd.putBitsValue(uint64(value&mask), rawLength)
 	} else {
 		value -= lb
-		err = pd.putBitsValue(uint64(value), rawLength)
+		return pd.putBitsValue(uint64(value), rawLength)
 	}
-	return
-
 }
 
 // append ENUMERATED type but do not implement extensive value and different value with index
-func (pd *perRawBitData) appendEnumerated(value uint64, extensive bool, lowerBoundPtr *int64, upperBoundPtr *int64) (err error) {
+func (pd *perRawBitData) appendEnumerated(value uint64, extensive bool, lowerBoundPtr *int64,
+	upperBoundPtr *int64) error {
 	if lowerBoundPtr == nil || upperBoundPtr == nil {
-		err = fmt.Errorf("ENUMERATED value constraint is error ")
-		return
+		return fmt.Errorf("ENUMERATED value constraint is error")
 	}
 	lb, ub := *lowerBoundPtr, *upperBoundPtr
 	if signedValue := int64(value); signedValue > ub {
 		if extensive {
-			err = fmt.Errorf("Unsupport the extensive value of ENUMERATED ")
+			return fmt.Errorf("Unsupport the extensive value of ENUMERATED")
 		} else {
-			err = fmt.Errorf("ENUMERATED value is larger than upperbound")
+			return fmt.Errorf("ENUMERATED value is larger than upperbound")
 		}
-		return
 	} else if signedValue < lb {
-		err = fmt.Errorf("ENUMERATED value is smaller than lowerbound")
-		return
+		return fmt.Errorf("ENUMERATED value is smaller than lowerbound")
 	}
 	if extensive {
-		if err = pd.putBitsValue(0, 1); err != nil {
-			return
+		if err := pd.putBitsValue(0, 1); err != nil {
+			return err
 		}
 	}
 
 	valueRange := ub - lb + 1
 	perTrace(2, fmt.Sprintf("Encoding ENUMERATED Value : %d with Value Range(%d..%d)", value, lb, ub))
 	if valueRange > 1 {
-		err = pd.appendConstraintValue(valueRange, value)
+		return pd.appendConstraintValue(valueRange, value)
 	}
-	return
+	return nil
 
 }
 
-func (pd *perRawBitData) parseSequenceOf(v reflect.Value, params fieldParameters) (err error) {
+func (pd *perRawBitData) parseSequenceOf(v reflect.Value, params fieldParameters) error {
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	numElements := int64(v.Len())
 	if params.sizeLowerBound != nil && *params.sizeLowerBound < 65536 {
@@ -481,84 +480,82 @@ func (pd *perRawBitData) parseSequenceOf(v reflect.Value, params fieldParameters
 		ub = *params.sizeUpperBound
 		if params.sizeExtensible {
 			if numElements > ub {
-				err = pd.putBitsValue(1, 1)
+				if err := pd.putBitsValue(1, 1); err != nil {
+					return err
+				}
 			} else {
-				err = pd.putBitsValue(0, 1)
+				if err := pd.putBitsValue(0, 1); err != nil {
+					return err
+				}
 				sizeRange = ub - lb + 1
 			}
 		} else if numElements > ub {
-			err = fmt.Errorf("SEQUENCE OF Size is larger than upperbound")
+			return fmt.Errorf("SEQUENCE OF Size is larger than upperbound")
 		} else {
 			sizeRange = ub - lb + 1
 		}
-		if err != nil {
-			return
-		}
-
 	} else {
 		sizeRange = -1
 	}
 
 	if numElements < lb {
-		err = fmt.Errorf("SEQUENCE OF Size is lower than lowerbound")
+		return fmt.Errorf("SEQUENCE OF Size is lower than lowerbound")
 	} else if sizeRange == 1 {
 		perTrace(3, fmt.Sprintf("Encoding Length of \"SEQUENCE OF\"  with fix-size %d", ub))
 		if numElements != ub {
-			err = fmt.Errorf("Encoding Length %d != fix-size %d", numElements, ub)
+			return fmt.Errorf("Encoding Length %d != fix-size %d", numElements, ub)
 		}
 	} else if sizeRange > 0 {
 		perTrace(3, fmt.Sprintf("Encoding Length(%d) of \"SEQUENCE OF\"  with Size Range(%d..%d)", numElements, lb, ub))
-		err = pd.appendConstraintValue(sizeRange, uint64(numElements-lb))
+		if err := pd.appendConstraintValue(sizeRange, uint64(numElements-lb)); err != nil {
+			return err
+		}
 	} else {
 		perTrace(3, fmt.Sprintf("Encoding Length(%d) of \"SEQUENCE OF\" with Semi-Constraint Range(%d..)", numElements, lb))
 		pd.appendAlignBits()
 		pd.bytes = append(pd.bytes, byte(numElements&0xff))
 		perTrace(1, perRawBitLog(8, len(pd.bytes), pd.bitsOffset, uint64(numElements)))
 	}
-	if err != nil {
-		return
-	}
 	perTrace(2, fmt.Sprintf("Encoding  \"SEQUENCE OF\" struct %s with len(%d)", v.Type().Elem().Name(), numElements))
 	params.sizeExtensible = false
 	params.sizeUpperBound = nil
 	params.sizeLowerBound = nil
 	for i := 0; i < v.Len(); i++ {
-		err = pd.makeField(v.Index(i), params)
-		if err != nil {
-			return
+		if err := pd.makeField(v.Index(i), params); err != nil {
+			return err
 		}
 	}
-	return
+	return nil
 }
 
-func (pd *perRawBitData) appendChoiceIndex(present int, extensive bool, upperBoundPtr *int64) (err error) {
+func (pd *perRawBitData) appendChoiceIndex(present int, extensive bool, upperBoundPtr *int64) error {
 	var ub int64
 	rawChoice := present - 1
 	if upperBoundPtr == nil {
-		err = fmt.Errorf("The upper bound of CHIOCE is missing")
+		return fmt.Errorf("The upper bound of CHIOCE is missing")
 	} else if ub = *upperBoundPtr; ub < 0 {
-		err = fmt.Errorf("The upper bound of CHIOCE is negative")
+		return fmt.Errorf("The upper bound of CHIOCE is negative")
 	} else if extensive && rawChoice > int(ub) {
-		err = fmt.Errorf("Unsupport value of CHOICE type is in Extensed")
-	}
-	if err != nil {
-		return
+		return fmt.Errorf("Unsupport value of CHOICE type is in Extensed")
 	}
 	perTrace(2, fmt.Sprintf("Encoding Present index of CHOICE  %d - 1", present))
-	err = pd.appendConstraintValue(ub+1, uint64(rawChoice))
-	return
+	if err := pd.appendConstraintValue(ub+1, uint64(rawChoice)); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (pd *perRawBitData) appendOpenType(v reflect.Value, params fieldParameters) (err error) {
+func (pd *perRawBitData) appendOpenType(v reflect.Value, params fieldParameters) error {
 
 	pdOpenType := &perRawBitData{[]byte(""), 0}
 	perTrace(2, fmt.Sprintf("Encoding OpenType %s to temp RawData", v.Type().String()))
-	if err = pdOpenType.makeField(v, params); err != nil {
-		return
+	if err := pdOpenType.makeField(v, params); err != nil {
+		return err
 	}
 	openTypeBytes := pdOpenType.bytes
 	rawLength := uint64(len(pdOpenType.bytes))
-	perTrace(2, fmt.Sprintf("Encoding OpenType %s RawData : 0x%0x(%d bytes)", v.Type().String(), pdOpenType.bytes, rawLength))
+	perTrace(2, fmt.Sprintf("Encoding OpenType %s RawData : 0x%0x(%d bytes)", v.Type().String(), pdOpenType.bytes,
+		rawLength))
 
 	var byteOffset, partOfRawLength uint64
 	for {
@@ -569,17 +566,18 @@ func (pd *perRawBitData) appendOpenType(v reflect.Value, params fieldParameters)
 		} else {
 			partOfRawLength = rawLength
 		}
-		if err = pd.appendLength(-1, partOfRawLength); err != nil {
-			return
+		if err := pd.appendLength(-1, partOfRawLength); err != nil {
+			return err
 		}
 		perTrace(2, fmt.Sprintf("Encoding Part of OpenType RawData size %d", partOfRawLength))
 		if partOfRawLength == 0 {
-			return
+			return nil
 		}
 		pd.appendAlignBits()
 		pd.bytes = append(pd.bytes, openTypeBytes[byteOffset:byteOffset+partOfRawLength]...)
 		perTrace(1, perRawBitLog(partOfRawLength*8, len(pd.bytes), pd.bitsOffset, openTypeBytes))
-		perTrace(2, fmt.Sprintf("Encoded OpenType RawData (length = %d): 0x%0x", partOfRawLength, openTypeBytes[byteOffset:byteOffset+partOfRawLength]))
+		perTrace(2, fmt.Sprintf("Encoded OpenType RawData (length = %d): 0x%0x", partOfRawLength,
+			openTypeBytes[byteOffset:byteOffset+partOfRawLength]))
 		rawLength -= partOfRawLength
 		if rawLength > 0 {
 			byteOffset += partOfRawLength
@@ -590,9 +588,9 @@ func (pd *perRawBitData) appendOpenType(v reflect.Value, params fieldParameters)
 	}
 
 	perTrace(2, fmt.Sprintf("Encoded OpenType %s", v.Type().String()))
-	return
+	return nil
 }
-func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err error) {
+func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) error {
 	if !v.IsValid() {
 		return fmt.Errorf("aper: cannot marshal nil value")
 	}
@@ -608,25 +606,26 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err
 	// We deal with the structures defined in this package first.
 	switch fieldType {
 	case BitStringType:
-		err = pd.appendBitString(v.Field(0).Bytes(), v.Field(1).Uint(), params.sizeExtensible, params.sizeLowerBound, params.sizeUpperBound)
-		return
+		err := pd.appendBitString(v.Field(0).Bytes(), v.Field(1).Uint(), params.sizeExtensible, params.sizeLowerBound,
+			params.sizeUpperBound)
+		return err
 	case ObjectIdentifierType:
-		err = fmt.Errorf("Unsupport ObjectIdenfier type")
-		return
+		err := fmt.Errorf("Unsupport ObjectIdenfier type")
+		return err
 	case OctetStringType:
-		err = pd.appendOctetString(v.Bytes(), params.sizeExtensible, params.sizeLowerBound, params.sizeUpperBound)
-		return
+		err := pd.appendOctetString(v.Bytes(), params.sizeExtensible, params.sizeLowerBound, params.sizeUpperBound)
+		return err
 	case EnumeratedType:
-		err = pd.appendEnumerated(v.Uint(), params.valueExtensible, params.valueLowerBound, params.valueUpperBound)
-		return
+		err := pd.appendEnumerated(v.Uint(), params.valueExtensible, params.valueLowerBound, params.valueUpperBound)
+		return err
 	}
 	switch val := v; val.Kind() {
 	case reflect.Bool:
-		err = pd.appendBool(v.Bool())
-		return
+		err := pd.appendBool(v.Bool())
+		return err
 	case reflect.Int, reflect.Int32, reflect.Int64:
-		err = pd.appendInteger(v.Int(), params.valueExtensible, params.valueLowerBound, params.valueUpperBound)
-		return
+		err := pd.appendInteger(v.Int(), params.valueExtensible, params.valueLowerBound, params.valueUpperBound)
+		return err
 
 	case reflect.Struct:
 
@@ -638,16 +637,15 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err
 		// struct extensive TODO: support extensed type
 		if params.valueExtensible {
 			perTrace(2, fmt.Sprintf("Encoding Value Extensive Bit : %t", false))
-			if err = pd.putBitsValue(0, 1); err != nil {
-				return
+			if err := pd.putBitsValue(0, 1); err != nil {
+				return err
 			}
 		}
 		sequenceType = (structType.NumField() <= 0 || structType.Field(0).Name != "Present")
 		// pass tag for optional
 		for i := 0; i < structType.NumField(); i++ {
 			if structType.Field(i).PkgPath != "" {
-				err = fmt.Errorf("struct contains unexported fields : " + structType.Field(i).PkgPath)
-				return
+				return fmt.Errorf("struct contains unexported fields : " + structType.Field(i).PkgPath)
 			}
 			tempParams := parseFieldParameters(structType.Field(i).Tag.Get("aper"))
 			if sequenceType {
@@ -660,7 +658,7 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err
 						optionalPresents++
 					}
 				} else if v.Field(i).Type().Kind() == reflect.Ptr && v.Field(i).IsNil() {
-					err = fmt.Errorf("nil element in SEQUENCE type")
+					return fmt.Errorf("nil element in SEQUENCE type")
 				}
 			}
 
@@ -668,8 +666,8 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err
 		}
 		if optionalCount > 0 {
 			perTrace(2, fmt.Sprintf("putting optional(%d), optionalPresents is %0b", optionalCount, optionalPresents))
-			if err = pd.putBitsValue(optionalPresents, optionalCount); err != nil {
-				return
+			if err := pd.putBitsValue(optionalPresents, optionalCount); err != nil {
+				return err
 			}
 		}
 
@@ -677,31 +675,31 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err
 		if !sequenceType {
 			present := int(v.Field(0).Int())
 			if present == 0 {
-				err = fmt.Errorf("CHOICE or OpenType present is 0(present's field number)")
+				return fmt.Errorf("CHOICE or OpenType present is 0(present's field number)")
 			} else if present >= structType.NumField() {
-				err = fmt.Errorf("Present is bigger than number of struct field")
+				return fmt.Errorf("Present is bigger than number of struct field")
 			} else if params.openType {
 				if params.referenceFieldValue == nil {
-					err = fmt.Errorf("OpenType reference value is empty")
-					return
+					return fmt.Errorf("OpenType reference value is empty")
 				}
 				refValue := *params.referenceFieldValue
 
 				if structParams[present].referenceFieldValue == nil || *structParams[present].referenceFieldValue != refValue {
-					err = fmt.Errorf("reference value and present reference value is not match")
-					return
+					return fmt.Errorf("reference value and present reference value is not match")
 				}
 				perTrace(2, fmt.Sprintf("Encoding Present index of OpenType is %d ", present))
-				err = pd.appendOpenType(val.Field(present), structParams[present])
-			} else {
-				err = pd.appendChoiceIndex(present, params.valueExtensible, params.valueUpperBound)
-
-				if err != nil {
-					return
+				if err := pd.appendOpenType(val.Field(present), structParams[present]); err != nil {
+					return err
 				}
-				err = pd.makeField(val.Field(present), structParams[present])
+			} else {
+				if err := pd.appendChoiceIndex(present, params.valueExtensible, params.valueUpperBound); err != nil {
+					return err
+				}
+				if err := pd.makeField(val.Field(present), structParams[present]); err != nil {
+					return err
+				}
 			}
-			return
+			return nil
 
 		}
 
@@ -726,33 +724,31 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) (err
 					}
 				}
 				if index == i {
-					err = fmt.Errorf("Open type is not reference to the other field in the struct")
-					return
+					return fmt.Errorf("Open type is not reference to the other field in the struct")
 				}
 				structParams[i].referenceFieldValue = new(int64)
-				*structParams[i].referenceFieldValue, err = getReferenceFieldValue(val.Field(index))
-				if err != nil {
-					return
+				if value, err := getReferenceFieldValue(val.Field(index)); err != nil {
+					return err
+				} else {
+					*structParams[i].referenceFieldValue = value
 				}
 			}
-			err = pd.makeField(val.Field(i), structParams[i])
-			if err != nil {
-				return
+			if err := pd.makeField(val.Field(i), structParams[i]); err != nil {
+				return err
 			}
 		}
-		return
+		return nil
 	case reflect.Slice:
-		err = pd.parseSequenceOf(v, params)
-		return
+		err := pd.parseSequenceOf(v, params)
+		return err
 	case reflect.String:
 		printableString := v.String()
 		perTrace(2, fmt.Sprintf("Encoding PrintableString : \"%s\" using Octet String decoding method", printableString))
-		err = pd.appendOctetString([]byte(printableString), params.sizeExtensible, params.sizeLowerBound, params.sizeUpperBound)
-		return
+		err := pd.appendOctetString([]byte(printableString), params.sizeExtensible, params.sizeLowerBound,
+			params.sizeUpperBound)
+		return err
 	}
-	err = fmt.Errorf("unsupported: " + v.Type().String())
-	return
-
+	return fmt.Errorf("unsupported: " + v.Type().String())
 }
 
 // Marshal returns the ASN.1 encoding of val.

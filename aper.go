@@ -173,7 +173,7 @@ func (pd *perBitData) parseConstraintValue(valueRange int64) (value uint64, err 
 		return
 	}
 	value, err = pd.getBitsValue(bytes * 8)
-	return
+	return value, err
 }
 
 func (pd *perBitData) parseLength(sizeRange int64, repeat *bool) (value uint64, err error) {
@@ -207,10 +207,10 @@ func (pd *perBitData) parseLength(sizeRange int64, repeat *bool) (value uint64, 
 	}
 	*repeat = true
 	value = 16384 * firstByte
-	return
+	return value, err
 }
 
-func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (bitString BitString, err error) {
+func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (BitString, error) {
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if !extensed {
 		if lowerBoundPtr != nil {
@@ -225,19 +225,19 @@ func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperB
 		sizeRange = -1
 	}
 	// initailization
-	bitString = BitString{[]byte{}, 0}
+	bitString := BitString{[]byte{}, 0}
 	// lowerbound == upperbound
 	if sizeRange == 1 {
 		sizes := uint64(ub+7) >> 3
 		bitString.BitLength = uint64(ub)
 		perTrace(2, fmt.Sprintf("Decoding BIT STRING size %d", ub))
 		if sizes > 2 {
-			if err = pd.parseAlignBits(); err != nil {
-				return
+			if err := pd.parseAlignBits(); err != nil {
+				return bitString, err
 			}
 			if (pd.byteOffset + sizes) > uint64(len(pd.bytes)) {
-				err = fmt.Errorf("PER data out of range")
-				return
+				err := fmt.Errorf("PER data out of range")
+				return bitString, err
 			}
 			bitString.Bytes = pd.bytes[pd.byteOffset : pd.byteOffset+sizes]
 			pd.byteOffset += sizes
@@ -247,31 +247,38 @@ func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperB
 			}
 			perTrace(1, perBitLog(uint64(ub), pd.byteOffset, pd.bitsOffset, bitString.Bytes))
 		} else {
-			bitString.Bytes, err = pd.getBitString(uint(ub))
+			if byte, err := pd.getBitString(uint(ub)); err != nil {
+				logger.AperLog.Warnf("PD GetBitString error: %+v", err)
+				return bitString, err
+			} else {
+				bitString.Bytes = byte
+			}
 		}
 		perTrace(2, fmt.Sprintf("Decoded BIT STRING (length = %d): %0.8b", ub, bitString.Bytes))
-		return
+		return bitString, nil
 
 	}
 	repeat := false
 	for {
 		var rawLength uint64
-		if rawLength, err = pd.parseLength(sizeRange, &repeat); err != nil {
-			return
+		if length, err := pd.parseLength(sizeRange, &repeat); err != nil {
+			return bitString, err
+		} else {
+			rawLength = length
 		}
 		rawLength += uint64(lb)
 		perTrace(2, fmt.Sprintf("Decoding BIT STRING size %d", rawLength))
 		if rawLength == 0 {
-			return
+			return bitString, nil
 		}
 		sizes := (rawLength + 7) >> 3
-		if err = pd.parseAlignBits(); err != nil {
-			return
+		if err := pd.parseAlignBits(); err != nil {
+			return bitString, err
 		}
 
 		if (pd.byteOffset + sizes) > uint64(len(pd.bytes)) {
-			err = fmt.Errorf("PER data out of range")
-			return
+			err := fmt.Errorf("PER data out of range")
+			return bitString, err
 		}
 		bitString.Bytes = append(bitString.Bytes, pd.bytes[pd.byteOffset:pd.byteOffset+sizes]...)
 		bitString.BitLength += rawLength
@@ -290,9 +297,10 @@ func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperB
 			break
 		}
 	}
-	return
+	return bitString, nil
 }
-func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (octetString OctetString, err error) {
+func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (
+	OctetString, error) {
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if !extensed {
 		if lowerBoundPtr != nil {
@@ -307,45 +315,51 @@ func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, uppe
 		sizeRange = -1
 	}
 	// initailization
-	octetString = OctetString("")
+	octetString := OctetString("")
 	// lowerbound == upperbound
 	if sizeRange == 1 {
 		perTrace(2, fmt.Sprintf("Decoding OCTET STRING size %d", ub))
 		if ub > 2 {
 			unsignedUB := uint64(ub)
-			if err = pd.parseAlignBits(); err != nil {
-				return
+			if err := pd.parseAlignBits(); err != nil {
+				return octetString, err
 			}
 			if (int64(pd.byteOffset) + ub) > int64(len(pd.bytes)) {
-				err = fmt.Errorf("per data out of range")
-				return
+				err := fmt.Errorf("per data out of range")
+				return octetString, err
 			}
 			octetString = pd.bytes[pd.byteOffset : pd.byteOffset+unsignedUB]
 			pd.byteOffset += uint64(ub)
 			perTrace(1, perBitLog(8*unsignedUB, pd.byteOffset, pd.bitsOffset, octetString))
 		} else {
-			octetString, err = pd.getBitString(uint(ub * 8))
+			if octet, err := pd.getBitString(uint(ub * 8)); err != nil {
+				return octetString, err
+			} else {
+				octetString = octet
+			}
 		}
 		perTrace(2, fmt.Sprintf("Decoded OCTET STRING (length = %d): 0x%0x", ub, octetString))
-		return
+		return octetString, nil
 
 	}
 	repeat := false
 	for {
 		var rawLength uint64
-		if rawLength, err = pd.parseLength(sizeRange, &repeat); err != nil {
-			return
+		if length, err := pd.parseLength(sizeRange, &repeat); err != nil {
+			return octetString, err
+		} else {
+			rawLength = length
 		}
 		rawLength += uint64(lb)
 		perTrace(2, fmt.Sprintf("Decoding OCTET STRING size %d", rawLength))
 		if rawLength == 0 {
-			return
-		} else if err = pd.parseAlignBits(); err != nil {
-			return
+			return octetString, nil
+		} else if err := pd.parseAlignBits(); err != nil {
+			return octetString, err
 		}
 		if (rawLength + pd.byteOffset) > uint64(len(pd.bytes)) {
-			err = fmt.Errorf("per data out of range ")
-			return
+			err := fmt.Errorf("per data out of range ")
+			return octetString, err
 		}
 		octetString = append(octetString, pd.bytes[pd.byteOffset:pd.byteOffset+rawLength]...)
 		pd.byteOffset += rawLength
@@ -358,11 +372,11 @@ func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, uppe
 			break
 		}
 	}
-	return
+	return octetString, nil
 }
 
 func (pd *perBitData) parseBool() (value bool, err error) {
-	perTrace(3, fmt.Sprintf("Decoding BOOLEAN Value"))
+	perTrace(3, "Decoding BOOLEAN Value")
 	bit, err1 := pd.getBitsValue(1)
 	if err1 != nil {
 		err = err1
@@ -370,19 +384,19 @@ func (pd *perBitData) parseBool() (value bool, err error) {
 	}
 	if bit == 1 {
 		value = true
-		perTrace(2, fmt.Sprintf("Decoded BOOLEAN Value : ture"))
+		perTrace(2, "Decoded BOOLEAN Value : ture")
 	} else {
 		value = false
-		perTrace(2, fmt.Sprintf("Decoded BOOLEAN Value : false"))
+		perTrace(2, "Decoded BOOLEAN Value : false")
 	}
 	return
 }
 
-func (pd *perBitData) parseInteger(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (value int64, err error) {
+func (pd *perBitData) parseInteger(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (int64, error) {
 	var lb, ub, valueRange int64 = 0, -1, 0
 	if !extensed {
 		if lowerBoundPtr == nil {
-			perTrace(3, fmt.Sprintf("Decoding INTEGER with Unconstraint Value"))
+			perTrace(3, "Decoding INTEGER with Unconstraint Value")
 			valueRange = -1
 		} else {
 			lb = *lowerBoundPtr
@@ -396,32 +410,29 @@ func (pd *perBitData) parseInteger(extensed bool, lowerBoundPtr *int64, upperBou
 		}
 	} else {
 		valueRange = -1
-		perTrace(3, fmt.Sprintf("Decoding INTEGER with Extensive Value"))
+		perTrace(3, "Decoding INTEGER with Extensive Value")
 	}
 	var rawLength uint
 	if valueRange == 1 {
-		value = ub
-		return
+		return ub, nil
 	} else if valueRange <= 0 {
 		// semi-constraint or unconstraint
-		if err = pd.parseAlignBits(); err != nil {
-			return
+		if err := pd.parseAlignBits(); err != nil {
+			return int64(0), err
 		}
 		if pd.byteOffset >= uint64(len(pd.bytes)) {
-			err = fmt.Errorf("per data out of range")
-			return
+			return int64(0), fmt.Errorf("per data out of range")
 		}
 		rawLength = uint(pd.bytes[pd.byteOffset])
 		pd.byteOffset++
 		perTrace(1, perBitLog(8, pd.byteOffset, pd.bitsOffset, uint64(rawLength)))
 	} else if valueRange <= 65536 {
-		rawValue, err1 := pd.parseConstraintValue(valueRange)
-		if err1 != nil {
-			err = err1
+		rawValue, err := pd.parseConstraintValue(valueRange)
+		if err != nil {
+			return int64(0), err
 		} else {
-			value = int64(rawValue) + lb
+			return int64(rawValue) + lb, nil
 		}
-		return
 	} else {
 		// valueRange > 65536
 		var byteLen uint
@@ -440,37 +451,36 @@ func (pd *perBitData) parseInteger(extensed bool, lowerBoundPtr *int64, upperBou
 				break
 			}
 		}
-		if tempLength, err1 := pd.getBitsValue(i); err1 != nil {
-			err = err1
-			return
+		if tempLength, err := pd.getBitsValue(i); err != nil {
+			return int64(0), err
 		} else {
 			rawLength = uint(tempLength)
 		}
 		rawLength++
-		if err = pd.parseAlignBits(); err != nil {
-			return
+		if err := pd.parseAlignBits(); err != nil {
+			return int64(0), err
 		}
 	}
 	perTrace(2, fmt.Sprintf("Decoding INTEGER Length with %d bytes", rawLength))
-	var rawValue uint64
-	if rawValue, err = pd.getBitsValue(rawLength * 8); err != nil {
-		return
+
+	if rawValue, err := pd.getBitsValue(rawLength * 8); err != nil {
+		return int64(0), err
 	} else if valueRange < 0 {
 		signedBitMask := uint64(1 << (rawLength*8 - 1))
 		valueMask := signedBitMask - 1
 		// negative
 		if rawValue&signedBitMask > 0 {
-			value = int64((^rawValue)&valueMask+1) * -1
-			return
+			return int64((^rawValue)&valueMask+1) * -1, nil
 		}
+		return int64(rawValue) + lb, nil
+	} else {
+		return int64(rawValue) + lb, nil
 	}
-	value = int64(rawValue) + lb
-	return
-
 }
 
 // parse ENUMERATED type but do not implement extensive value and different value with index
-func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (value uint64, err error) {
+func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (value uint64,
+	err error) {
 	if extensed {
 		err = fmt.Errorf("Unsupport the extensive value of ENUMERATED ")
 		return
@@ -489,7 +499,10 @@ func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upper
 	return
 
 }
-func (pd *perBitData) parseSequenceOf(sizeExtensed bool, params fieldParameters, sliceType reflect.Type) (sliceContent reflect.Value, err error) {
+
+func (pd *perBitData) parseSequenceOf(sizeExtensed bool, params fieldParameters, sliceType reflect.Type) (
+	reflect.Value, error) {
+	var sliceContent reflect.Value
 	var lb int64 = 0
 	var sizeRange int64
 	if params.sizeLowerBound != nil && *params.sizeLowerBound < 65536 {
@@ -506,17 +519,21 @@ func (pd *perBitData) parseSequenceOf(sizeExtensed bool, params fieldParameters,
 
 	var numElements uint64
 	if sizeRange > 1 {
-		numElements, err = pd.parseConstraintValue(sizeRange)
+		if numElementsTmp, err := pd.parseConstraintValue(sizeRange); err != nil {
+			logger.AperLog.Warnf("Parse Constraint Value failed: %+v", err)
+		} else {
+			numElements = numElementsTmp
+		}
 		numElements += uint64(lb)
 	} else if sizeRange == 1 {
 		numElements += uint64(lb)
 	} else {
-		if err = pd.parseAlignBits(); err != nil {
-			return
+		if err := pd.parseAlignBits(); err != nil {
+			return sliceContent, err
 		}
 		if pd.byteOffset >= uint64(len(pd.bytes)) {
-			err = fmt.Errorf("per data out of range")
-			return
+			err := fmt.Errorf("per data out of range")
+			return sliceContent, err
 		}
 		numElements = uint64(pd.bytes[pd.byteOffset])
 		pd.byteOffset++
@@ -529,12 +546,12 @@ func (pd *perBitData) parseSequenceOf(sizeExtensed bool, params fieldParameters,
 	intNumElements := int(numElements)
 	sliceContent = reflect.MakeSlice(sliceType, intNumElements, intNumElements)
 	for i := 0; i < intNumElements; i++ {
-		err = parseField(sliceContent.Index(i), pd, params)
+		err := parseField(sliceContent.Index(i), pd, params)
 		if err != nil {
-			return
+			return sliceContent, err
 		}
 	}
-	return
+	return sliceContent, nil
 }
 
 func (pd *perBitData) getChoiceIndex(extensed bool, upperBoundPtr *int64) (present int, err error) {
@@ -576,56 +593,55 @@ func getReferenceFieldValue(v reflect.Value) (value int64, err error) {
 	return
 }
 
-func (pd *perBitData) parseOpenType(v reflect.Value, params fieldParameters) (err error) {
+func (pd *perBitData) parseOpenType(v reflect.Value, params fieldParameters) error {
 
 	pdOpenType := &perBitData{[]byte(""), 0, 0}
 	repeat := false
 	for {
 		var rawLength uint64
-		if rawLength, err = pd.parseLength(-1, &repeat); err != nil {
-			return
+		if rawLengthTmp, err := pd.parseLength(-1, &repeat); err != nil {
+			return err
+		} else {
+			rawLength = rawLengthTmp
 		}
 		if rawLength == 0 {
 			break
-		} else if err = pd.parseAlignBits(); err != nil {
-			return
+		} else if err := pd.parseAlignBits(); err != nil {
+			return err
 		}
 		if (rawLength + pd.byteOffset) > uint64(len(pd.bytes)) {
-			err = fmt.Errorf("per data out of range ")
-			return
+			return fmt.Errorf("per data out of range ")
 		}
 		pdOpenType.bytes = append(pdOpenType.bytes, pd.bytes[pd.byteOffset:pd.byteOffset+rawLength]...)
 		pd.byteOffset += rawLength
 
 		if !repeat {
-			if err = pd.parseAlignBits(); err != nil {
-				return
+			if err := pd.parseAlignBits(); err != nil {
+				return err
 			}
 			break
 		}
 	}
 	perTrace(2, fmt.Sprintf("Decoding OpenType %s with (len = %d byte)", v.Type().String(), len(pdOpenType.bytes)))
-	err = parseField(v, pdOpenType, params)
+	err := parseField(v, pdOpenType, params)
 	perTrace(2, fmt.Sprintf("Decoded OpenType %s", v.Type().String()))
-	return
+	return err
 }
 
 // parseField is the main parsing function. Given a byte slice and an offset
 // into the array, it will try to parse a suitable ASN.1 value out and store it
 // in the given Value. TODO : ObjectIdenfier, handle extension Field
-func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err error) {
+func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 	fieldType := v.Type()
 
 	// If we have run out of data return error.
 	if pd.byteOffset == uint64(len(pd.bytes)) {
-		err = fmt.Errorf("sequence truncated")
-		return
+		return fmt.Errorf("sequence truncated")
 	}
 	if v.Kind() == reflect.Ptr {
 		ptr := reflect.New(fieldType.Elem())
 		v.Set(ptr)
-		err = parseField(v.Elem(), pd, params)
-		return
+		return parseField(v.Elem(), pd, params)
 	}
 	sizeExtensible := false
 	valueExtensible := false
@@ -655,42 +671,41 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 			return err1
 		}
 		v.Set(reflect.ValueOf(bitString))
-		return
+		return nil
 	case ObjectIdentifierType:
-		err = fmt.Errorf("Unsupport ObjectIdenfier type")
-		return
+		return fmt.Errorf("Unsupport ObjectIdenfier type")
 	case OctetStringType:
-		octetString, err1 := pd.parseOctetString(sizeExtensible, params.sizeLowerBound, params.sizeUpperBound)
-		if err1 == nil {
+		if octetString, err := pd.parseOctetString(sizeExtensible, params.sizeLowerBound, params.sizeUpperBound); err != nil {
+			return err
+		} else {
 			v.Set(reflect.ValueOf(octetString))
+			return nil
 		}
-		err = err1
-		return
 	case EnumeratedType:
-		parsedEnum, err1 := pd.parseEnumerated(valueExtensible, params.valueLowerBound, params.valueUpperBound)
-		if err1 == nil {
+		if parsedEnum, err := pd.parseEnumerated(valueExtensible, params.valueLowerBound,
+			params.valueUpperBound); err != nil {
+			return err
+		} else {
 			v.SetUint(parsedEnum)
+			return nil
 		}
-		err = err1
-		return
 	}
 	switch val := v; val.Kind() {
 	case reflect.Bool:
-		parsedBool, err1 := pd.parseBool()
-		if err1 == nil {
+		if parsedBool, err := pd.parseBool(); err != nil {
+			return err
+		} else {
 			val.SetBool(parsedBool)
+			return nil
 		}
-		err = err1
-		return
 	case reflect.Int, reflect.Int32, reflect.Int64:
-		parsedInt, err1 := pd.parseInteger(valueExtensible, params.valueLowerBound, params.valueUpperBound)
-		if err1 == nil {
+		if parsedInt, err := pd.parseInteger(valueExtensible, params.valueLowerBound, params.valueUpperBound); err != nil {
+			return err
+		} else {
 			val.SetInt(parsedInt)
-			perTrace(2, fmt.Sprintf("Decoded INTEGER Value : %d", parsedInt))
+			perTrace(2, fmt.Sprintf("Decoded INTEGER Value: %d", parsedInt))
+			return nil
 		}
-		err = err1
-		return
-
 	case reflect.Struct:
 
 		structType := fieldType
@@ -701,8 +716,7 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 		// pass tag for optional
 		for i := 0; i < structType.NumField(); i++ {
 			if structType.Field(i).PkgPath != "" {
-				err = fmt.Errorf("struct contains unexported fields : " + structType.Field(i).PkgPath)
-				return
+				return fmt.Errorf("struct contains unexported fields : " + structType.Field(i).PkgPath)
 			}
 			tempParams := parseFieldParameters(structType.Field(i).Tag.Get("aper"))
 			// for optional flag
@@ -713,8 +727,10 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 		}
 
 		if optionalCount > 0 {
-			if optionalPresents, err = pd.getBitsValue(optionalCount); err != nil {
-				return
+			if optionalPresentsTmp, err := pd.getBitsValue(optionalCount); err != nil {
+				return err
+			} else {
+				optionalPresents = optionalPresentsTmp
 			}
 			perTrace(2, fmt.Sprintf("optionalPresents is %0b", optionalPresents))
 		}
@@ -724,8 +740,7 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 			var present int = 0
 			if params.openType {
 				if params.referenceFieldValue == nil {
-					err = fmt.Errorf("OpenType reference value is empty")
-					return
+					return fmt.Errorf("OpenType reference value is empty")
 				}
 				refValue := *params.referenceFieldValue
 
@@ -739,30 +754,29 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 					}
 				}
 				if present == 0 {
-					err = fmt.Errorf("OpenType reference value does not match any field")
+					return fmt.Errorf("OpenType reference value does not match any field")
 				} else if present >= structType.NumField() {
-					err = fmt.Errorf("OpenType Present is bigger than number of struct field")
+					return fmt.Errorf("OpenType Present is bigger than number of struct field")
 				} else {
 					val.Field(0).SetInt(int64(present))
 					perTrace(2, fmt.Sprintf("Decoded Present index of OpenType is %d ", present))
-					err = pd.parseOpenType(val.Field(present), structParams[present])
+					return pd.parseOpenType(val.Field(present), structParams[present])
 				}
 			} else {
-				present, err = pd.getChoiceIndex(valueExtensible, params.valueUpperBound)
-				if err != nil {
+				if presentTmp, err := pd.getChoiceIndex(valueExtensible, params.valueUpperBound); err != nil {
 					logger.AperLog.Errorf("pd.getChoiceIndex Error")
+				} else {
+					present = presentTmp
 				}
 				val.Field(0).SetInt(int64(present))
 				if present == 0 {
-					err = fmt.Errorf("CHOICE present is 0(present's field number)")
+					return fmt.Errorf("CHOICE present is 0(present's field number)")
 				} else if present >= structType.NumField() {
-					err = fmt.Errorf("CHOICE Present is bigger than number of struct field")
+					return fmt.Errorf("CHOICE Present is bigger than number of struct field")
 				} else {
-					err = parseField(val.Field(present), pd, structParams[present])
+					return parseField(val.Field(present), pd, structParams[present])
 				}
 			}
-			return
-
 		}
 
 		for i := 0; i < structType.NumField(); i++ {
@@ -785,44 +799,42 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 					}
 				}
 				if index == i {
-					err = fmt.Errorf("Open type is not reference to the other field in the struct")
-					return
+					return fmt.Errorf("Open type is not reference to the other field in the struct")
 				}
 				structParams[i].referenceFieldValue = new(int64)
-				*structParams[i].referenceFieldValue, err = getReferenceFieldValue(val.Field(index))
-				if err != nil {
-					return
+				if referenceFieldValue, err := getReferenceFieldValue(val.Field(index)); err != nil {
+					return err
+				} else {
+					*structParams[i].referenceFieldValue = referenceFieldValue
 				}
 			}
-			err = parseField(val.Field(i), pd, structParams[i])
-			if err != nil {
-				return
+			if err := parseField(val.Field(i), pd, structParams[i]); err != nil {
+				return err
 			}
 		}
-		return
+		return nil
 	case reflect.Slice:
 		sliceType := fieldType
-		newSlice, err1 := pd.parseSequenceOf(sizeExtensible, params, sliceType)
-		if err1 == nil {
+		if newSlice, err := pd.parseSequenceOf(sizeExtensible, params, sliceType); err != nil {
+			return err
+		} else {
 			val.Set(newSlice)
+			return nil
 		}
-		err = err1
-		return
 	case reflect.String:
-		perTrace(2, fmt.Sprintf("Decoding PrintableString using Octet String decoding method"))
+		perTrace(2, "Decoding PrintableString using Octet String decoding method")
 
-		octetString, err1 := pd.parseOctetString(sizeExtensible, params.sizeLowerBound, params.sizeUpperBound)
-		err = err1
-		if err1 == nil {
+		if octetString, err := pd.parseOctetString(sizeExtensible, params.sizeLowerBound, params.sizeUpperBound); err != nil {
+			return err
+		} else {
 			printableString := string(octetString)
 			val.SetString(printableString)
 			perTrace(2, fmt.Sprintf("Decoded PrintableString : \"%s\"", printableString))
+			return nil
 		}
-		return
 
 	}
-	err = fmt.Errorf("unsupported: " + v.Type().String())
-	return
+	return fmt.Errorf("unsupported: " + v.Type().String())
 }
 
 // Unmarshal parses the APER-encoded ASN.1 data structure b
