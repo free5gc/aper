@@ -177,6 +177,40 @@ func (pd *perBitData) parseConstraintValue(valueRange int64) (value uint64, err 
 	return value, err
 }
 
+func (pd *perBitData) parseSemiConstrainedWholeNumber(lb uint64) (value uint64, err error) {
+	var repeat bool
+	var length uint64
+	if length, err = pd.parseLength(-1, &repeat); err != nil {
+		return
+	}
+	if length > 8 || repeat {
+		err = fmt.Errorf("Too long length: %d", length)
+		return
+	}
+	if value, err = pd.getBitsValue(uint(length) * 8); err != nil {
+		return
+	}
+	value += lb
+	return
+}
+
+func (pd *perBitData) parseNormallySmallNonNegativeWholeNumber() (value uint64, err error) {
+	var notSmallFlag uint64
+	if notSmallFlag, err = pd.getBitsValue(1); err != nil {
+		return
+	}
+	if notSmallFlag == 1 {
+		if value, err = pd.parseSemiConstrainedWholeNumber(0); err != nil {
+			return
+		}
+	} else {
+		if value, err = pd.getBitsValue(6); err != nil {
+			return
+		}
+	}
+	return
+}
+
 func (pd *perBitData) parseLength(sizeRange int64, repeat *bool) (value uint64, err error) {
 	*repeat = false
 	if sizeRange <= 65536 && sizeRange > 0 {
@@ -479,22 +513,30 @@ func (pd *perBitData) parseInteger(extensed bool, lowerBoundPtr *int64, upperBou
 	}
 }
 
-// parse ENUMERATED type but do not implement extensive value and different value with index
 func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (value uint64,
 	err error) {
-	if extensed {
-		err = fmt.Errorf("Unsupport the extensive value of ENUMERATED ")
-		return
-	}
 	if lowerBoundPtr == nil || upperBoundPtr == nil {
-		err = fmt.Errorf("ENUMERATED value constraint is error ")
+		err = fmt.Errorf("ENUMERATED value constraint is error")
 		return
 	}
 	lb, ub := *lowerBoundPtr, *upperBoundPtr
-	valueRange := ub - lb + 1
-	perTrace(2, fmt.Sprintf("Decoding ENUMERATED with Value Range(%d..%d)", lb, ub))
-	if valueRange > 1 {
-		value, err = pd.parseConstraintValue(valueRange)
+	if lb < 0 || lb > ub {
+		err = fmt.Errorf("ENUMERATED value constraint is error")
+		return
+	}
+
+	if extensed {
+		perTrace(2, fmt.Sprintf("Decoding ENUMERATED with Extensive Value of Range(%d..)", ub+1))
+		if value, err = pd.parseNormallySmallNonNegativeWholeNumber(); err != nil {
+			return
+		}
+		value += uint64(ub) + 1
+	} else {
+		perTrace(2, fmt.Sprintf("Decoding ENUMERATED with Value Range(%d..%d)", lb, ub))
+		valueRange := ub - lb + 1
+		if valueRange > 1 {
+			value, err = pd.parseConstraintValue(valueRange)
+		}
 	}
 	perTrace(2, fmt.Sprintf("Decoded ENUMERATED Value : %d", value))
 	return

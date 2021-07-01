@@ -119,6 +119,40 @@ func (pd *perRawBitData) appendConstraintValue(valueRange int64, value uint64) (
 	return
 }
 
+func (pd *perRawBitData) appendNormallySmallNonNegativeValue(value uint64) (err error) {
+	perTrace(3, fmt.Sprintf("Putting Normally Small Non-Negative Value %d", value))
+
+	if value < 64 {
+		if err = pd.putBitsValue(0, 1); err != nil {
+			return err
+		}
+		err = pd.putBitsValue(value, 6)
+	} else {
+		if err = pd.putBitsValue(1, 1); err != nil {
+			return err
+		}
+		err = pd.putSemiConstrainedWholeNumber(value, 0)
+	}
+	return
+}
+
+func (pd *perRawBitData) putSemiConstrainedWholeNumber(value uint64, lb uint64) (err error) {
+	if lb > value {
+		err = fmt.Errorf("Value(%d) is less than lower bound value(%d)", value, lb)
+		return
+	}
+	value -= lb
+	var length uint64 = 1
+	var valueTmp = value >> 8
+	for valueTmp > 0 {
+		length++
+		valueTmp = valueTmp >> 8
+	}
+	pd.appendLength(-1, length)
+	pd.putBitsValue(value, uint(length)*8)
+	return
+}
+
 func (pd *perRawBitData) appendLength(sizeRange int64, value uint64) (err error) {
 	if sizeRange <= 65536 && sizeRange > 0 {
 		return pd.appendConstraintValue(sizeRange, value)
@@ -439,33 +473,37 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 	}
 }
 
-// append ENUMERATED type but do not implement extensive value and different value with index
 func (pd *perRawBitData) appendEnumerated(value uint64, extensive bool, lowerBoundPtr *int64,
 	upperBoundPtr *int64) error {
 	if lowerBoundPtr == nil || upperBoundPtr == nil {
 		return fmt.Errorf("ENUMERATED value constraint is error")
 	}
 	lb, ub := *lowerBoundPtr, *upperBoundPtr
-	if signedValue := int64(value); signedValue > ub {
-		if extensive {
-			return fmt.Errorf("Unsupport the extensive value of ENUMERATED")
-		} else {
-			return fmt.Errorf("ENUMERATED value is larger than upperbound")
-		}
-	} else if signedValue < lb {
-		return fmt.Errorf("ENUMERATED value is smaller than lowerbound")
-	}
-	if extensive {
-		if err := pd.putBitsValue(0, 1); err != nil {
-			return err
-		}
+	if lb < 0 || lb > ub {
+		return fmt.Errorf("ENUMERATED value constraint is error")
 	}
 
-	valueRange := ub - lb + 1
-	perTrace(2, fmt.Sprintf("Encoding ENUMERATED Value : %d with Value Range(%d..%d)", value, lb, ub))
-	if valueRange > 1 {
-		return pd.appendConstraintValue(valueRange, value)
+	if value <= uint64(ub) {
+		if extensive {
+			if err := pd.putBitsValue(0, 1); err != nil {
+				return err
+			}
+		}
+		valueRange := ub - lb + 1
+		perTrace(2, fmt.Sprintf("Encoding ENUMERATED Value : %d with Value Range(%d..%d)", value, lb, ub))
+		if valueRange > 1 {
+			return pd.appendConstraintValue(valueRange, value)
+		}
+	} else {
+		if !extensive {
+			return fmt.Errorf("ENUMERATED value is larger than upperbound")
+		}
+		if err := pd.putBitsValue(1, 1); err != nil {
+			return err
+		}
+		return pd.appendNormallySmallNonNegativeValue(value - uint64(ub) - 1)
 	}
+
 	return nil
 
 }
