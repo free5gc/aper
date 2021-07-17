@@ -32,13 +32,15 @@ func (pd *perRawBitData) appendAlignBits() {
 	pd.bitsOffset = 0
 }
 
-func (pd *perRawBitData) putBitString(bytes []byte, numBits uint) (err error) {
+func (pd *perRawBitData) putBitString(bytes []byte, numBits uint) error {
+	var err error
+
 	bytes = bytes[:(numBits+7)>>3]
 	if pd.bitsOffset == 0 {
 		pd.bytes = append(pd.bytes, bytes...)
 		pd.bitsOffset = (numBits & 0x7)
 		perTrace(1, perRawBitLog(uint64(numBits), len(pd.bytes), pd.bitsOffset, bytes))
-		return
+		return err
 	}
 	bitsLeft := 8 - pd.bitsOffset
 	currentByte := len(pd.bytes) - 1
@@ -48,7 +50,7 @@ func (pd *perRawBitData) putBitString(bytes []byte, numBits uint) (err error) {
 		bytes = append([]byte{0x00}, bytes...)
 		var shiftBytes []byte
 		if shiftBytes, err = GetBitString(bytes, bitsLeft, pd.bitsOffset+numBits); err != nil {
-			return
+			return err
 		}
 		pd.bytes[currentByte] |= shiftBytes[0]
 		pd.bytes = append(pd.bytes, shiftBytes[1:]...)
@@ -57,12 +59,13 @@ func (pd *perRawBitData) putBitString(bytes []byte, numBits uint) (err error) {
 	pd.bitsOffset = (numBits & 0x7) + pd.bitsOffset
 	pd.bitCarry()
 	perTrace(1, perRawBitLog(uint64(numBits), len(pd.bytes), pd.bitsOffset, bytes))
-	return
+	return err
 }
 
-func (pd *perRawBitData) putBitsValue(value uint64, numBits uint) (err error) {
+func (pd *perRawBitData) putBitsValue(value uint64, numBits uint) error {
+	var err error
 	if numBits == 0 {
-		return
+		return err
 	}
 	Byteslen := (numBits + 7) >> 3
 	tempBytes := make([]byte, Byteslen)
@@ -77,24 +80,25 @@ func (pd *perRawBitData) putBitsValue(value uint64, numBits uint) (err error) {
 	for i = int(Byteslen) - 2; value > 0; i-- {
 		if i < 0 {
 			err = fmt.Errorf("Bits Value is over capacity")
-			return
+			return err
 		}
 		tempBytes[i] = byte(value & 0xff)
 		value >>= 8
 	}
 
 	err = pd.putBitString(tempBytes, numBits)
-	return
+	return err
 }
 
-func (pd *perRawBitData) appendConstraintValue(valueRange int64, value uint64) (err error) {
+func (pd *perRawBitData) appendConstraintValue(valueRange int64, value uint64) error {
+	var err error
 	perTrace(3, fmt.Sprintf("Putting Constraint Value %d with range %d", value, valueRange))
 
 	var bytes uint
 	if valueRange <= 255 {
 		if valueRange < 0 {
 			err = fmt.Errorf("Value range is negative")
-			return
+			return err
 		}
 		var i uint
 		// 1 ~ 8 bits
@@ -105,21 +109,22 @@ func (pd *perRawBitData) appendConstraintValue(valueRange int64, value uint64) (
 			}
 		}
 		err = pd.putBitsValue(value, i)
-		return
+		return err
 	} else if valueRange == 256 {
 		bytes = 1
 	} else if valueRange <= 65536 {
 		bytes = 2
 	} else {
 		err = fmt.Errorf("Constraint Value is large than 65536")
-		return
+		return err
 	}
 	pd.appendAlignBits()
 	err = pd.putBitsValue(value, bytes*8)
-	return
+	return err
 }
 
-func (pd *perRawBitData) appendNormallySmallNonNegativeValue(value uint64) (err error) {
+func (pd *perRawBitData) appendNormallySmallNonNegativeValue(value uint64) error {
+	var err error
 	perTrace(3, fmt.Sprintf("Putting Normally Small Non-Negative Value %d", value))
 
 	if value < 64 {
@@ -133,13 +138,12 @@ func (pd *perRawBitData) appendNormallySmallNonNegativeValue(value uint64) (err 
 		}
 		err = pd.putSemiConstrainedWholeNumber(value, 0)
 	}
-	return
+	return err
 }
 
-func (pd *perRawBitData) putSemiConstrainedWholeNumber(value uint64, lb uint64) (err error) {
+func (pd *perRawBitData) putSemiConstrainedWholeNumber(value uint64, lb uint64) error {
 	if lb > value {
-		err = fmt.Errorf("Value(%d) is less than lower bound value(%d)", value, lb)
-		return
+		return fmt.Errorf("Value(%d) is less than lower bound value(%d)", value, lb)
 	}
 	value -= lb
 	var length uint64 = 1
@@ -148,9 +152,13 @@ func (pd *perRawBitData) putSemiConstrainedWholeNumber(value uint64, lb uint64) 
 		length++
 		valueTmp = valueTmp >> 8
 	}
-	pd.appendLength(-1, length)
-	pd.putBitsValue(value, uint(length)*8)
-	return
+	if err := pd.appendLength(-1, length); err != nil {
+		return err
+	}
+	if err := pd.putBitsValue(value, uint(length)*8); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (pd *perRawBitData) appendLength(sizeRange int64, value uint64) (err error) {
@@ -174,7 +182,8 @@ func (pd *perRawBitData) appendLength(sizeRange int64, value uint64) (err error)
 }
 
 func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extensive bool,
-	lowerBoundPtr *int64, upperBoundPtr *int64) (err error) {
+	lowerBoundPtr *int64, upperBoundPtr *int64) error {
+	var err error
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if lowerBoundPtr != nil {
 		lb = *lowerBoundPtr
@@ -183,8 +192,7 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 			if bitsLength <= uint64(ub) {
 				sizeRange = ub - lb + 1
 			} else if !extensive {
-				err = fmt.Errorf("bitString Length is over upperbound")
-				return
+				return fmt.Errorf("bitString Length is over upperbound")
 			}
 			if extensive {
 				perTrace(2, "Putting size Extension Value")
@@ -226,7 +234,7 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 			err = pd.putBitString(bytes, uint(bitsLength))
 		}
 		perTrace(2, fmt.Sprintf("Encoded BIT STRING (length = %d): 0x%0x", bitsLength, bytes))
-		return
+		return err
 	}
 	rawLength := bitsLength - uint64(lb)
 
@@ -240,13 +248,13 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 			partOfRawLength = rawLength
 		}
 		if err = pd.appendLength(sizeRange, partOfRawLength); err != nil {
-			return
+			return err
 		}
 		partOfRawLength += uint64(lb)
 		sizes := (partOfRawLength + 7) >> 3
 		perTrace(2, fmt.Sprintf("Encoding BIT STRING size %d", partOfRawLength))
 		if partOfRawLength == 0 {
-			return
+			return err
 		}
 		pd.appendAlignBits()
 		pd.bytes = append(pd.bytes, bytes[byteOffset:byteOffset+sizes]...)
@@ -354,7 +362,8 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 
 }
 
-func (pd *perRawBitData) appendBool(value bool) (err error) {
+func (pd *perRawBitData) appendBool(value bool) error {
+	var err error
 	perTrace(3, fmt.Sprintf("Encoding BOOLEAN Value %t", value))
 	if value {
 		err = pd.putBitsValue(1, 1)
@@ -363,7 +372,7 @@ func (pd *perRawBitData) appendBool(value bool) (err error) {
 		err = pd.putBitsValue(0, 1)
 		perTrace(2, "Encoded BOOLEAN Value : 0x0")
 	}
-	return
+	return err
 }
 
 func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPtr *int64, upperBoundPtr *int64) error {
