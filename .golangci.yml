@@ -19,18 +19,6 @@ run:
   # "/" will be replaced by current OS file path separator to properly work
   # on Windows.
   skip-dirs:
-<<<<<<< HEAD
-=======
-    - release
-    - lib/openapi
-    - lib/ngap/ngapType
-    - ngapType
-    - lib/nas/nasType
-    - nasType
-    - lib/nas/nasMessage
-    - nasMessage
-    - lib/CommonConsumerTestData
->>>>>>> 8d5e6d9... feat(aper): lib go modulize
   # default is true. Enables skipping of directories:
   #   vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
   skip-dirs-use-default: true
