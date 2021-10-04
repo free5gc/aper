@@ -38,7 +38,7 @@ func SetLogLevel(level logrus.Level) {
 }
 
 // SetReportCaller : Set whether shows the filePath and functionName on loggers
-func SetReportCaller(bool bool) {
-	AperLog.Infoln("set report call :", bool)
-	log.SetReportCaller(bool)
+func SetReportCaller(enable bool) {
+	AperLog.Infoln("set report call :", enable)
+	log.SetReportCaller(enable)
 }

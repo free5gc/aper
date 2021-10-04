@@ -18,12 +18,12 @@ func perRawBitLog(numBits uint64, byteLen int, bitsOffset uint, value interface{
 	}
 	return fmt.Sprintf("  [PER put %2d bits, byteLen(after): %d, bitsOffset(after): %d, value: 0x%0x]",
 		numBits, byteLen, bitsOffset, reflect.ValueOf(value).Bytes())
-
 }
 
 func (pd *perRawBitData) bitCarry() {
 	pd.bitsOffset = pd.bitsOffset & 0x07
 }
+
 func (pd *perRawBitData) appendAlignBits() {
 	if alignBits := uint64(8-pd.bitsOffset&0x7) & 0x7; alignBits != 0 {
 		perTrace(2, fmt.Sprintf("Aligning %d bits", alignBits))
@@ -147,7 +147,7 @@ func (pd *perRawBitData) putSemiConstrainedWholeNumber(value uint64, lb uint64) 
 	}
 	value -= lb
 	var length uint64 = 1
-	var valueTmp = value >> 8
+	valueTmp := value >> 8
 	for valueTmp > 0 {
 		length++
 		valueTmp = valueTmp >> 8
@@ -207,7 +207,6 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 					}
 				}
 			}
-
 		}
 	}
 
@@ -271,7 +270,6 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 		}
 	}
 	return err
-
 }
 
 func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBoundPtr *int64,
@@ -301,7 +299,6 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 					}
 				}
 			}
-
 		}
 	}
 
@@ -359,7 +356,6 @@ func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBo
 		}
 	}
 	return nil
-
 }
 
 func (pd *perRawBitData) appendBool(value bool) error {
@@ -404,7 +400,6 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 					}
 				}
 			}
-
 		} else {
 			perTrace(3, fmt.Sprintf("Encoding INTEGER with Semi-Constraint Range(%d..)", lb))
 		}
@@ -514,7 +509,6 @@ func (pd *perRawBitData) appendEnumerated(value uint64, extensive bool, lowerBou
 	}
 
 	return nil
-
 }
 
 func (pd *perRawBitData) parseSequenceOf(v reflect.Value, params fieldParameters) error {
@@ -593,7 +587,6 @@ func (pd *perRawBitData) appendChoiceIndex(present int, extensive bool, upperBou
 }
 
 func (pd *perRawBitData) appendOpenType(v reflect.Value, params fieldParameters) error {
-
 	pdOpenType := &perRawBitData{[]byte(""), 0}
 	perTrace(2, fmt.Sprintf("Encoding OpenType %s to temp RawData", v.Type().String()))
 	if err := pdOpenType.makeField(v, params); err != nil {
@@ -637,6 +630,7 @@ func (pd *perRawBitData) appendOpenType(v reflect.Value, params fieldParameters)
 	perTrace(2, fmt.Sprintf("Encoded OpenType %s", v.Type().String()))
 	return nil
 }
+
 func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) error {
 	if !v.IsValid() {
 		return fmt.Errorf("aper: cannot marshal nil value")
@@ -696,7 +690,6 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 			}
 			tempParams := parseFieldParameters(structType.Field(i).Tag.Get("aper"))
 			if sequenceType {
-
 				// for optional flag
 				if tempParams.optional {
 					optionalCount++
@@ -747,7 +740,6 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 				}
 			}
 			return nil
-
 		}
 
 		for i := 0; i < structType.NumField(); i++ {

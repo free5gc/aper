@@ -16,7 +16,6 @@ type perBitData struct {
 }
 
 func perTrace(level int, s string) {
-
 	_, file, line, ok := runtime.Caller(1)
 	if !ok {
 		logger.AperLog.Debugln(s)
@@ -32,7 +31,6 @@ func perBitLog(numBits uint64, byteOffset uint64, bitsOffset uint, value interfa
 	}
 	return fmt.Sprintf("  [PER got %2d bits, byteOffset(after): %d, bitsOffset(after): %d, value: 0x%0x]",
 		numBits, byteOffset, bitsOffset, reflect.ValueOf(value).Bytes())
-
 }
 
 // GetBitString is to get BitString with desire size from source byte array with bit offset
@@ -90,7 +88,7 @@ func GetBitsValue(srcBytes []byte, bitsOffset uint, numBits uint) (value uint64,
 		value <<= 8
 		value |= uint64(uint(dstBytes[i]))
 	}
-	if numBitsOff := uint(numBits & 0x7); numBitsOff != 0 {
+	if numBitsOff := (numBits & 0x7); numBitsOff != 0 {
 		var mask uint = (1 << numBitsOff) - 1
 		value <<= numBitsOff
 		value |= uint64(uint(dstBytes[len(dstBytes)-1]>>(8-numBitsOff)) & mask)
@@ -104,12 +102,11 @@ func (pd *perBitData) bitCarry() {
 }
 
 func (pd *perBitData) getBitString(numBits uint) (dstBytes []byte, err error) {
-
 	dstBytes, err = GetBitString(pd.bytes[pd.byteOffset:], pd.bitsOffset, numBits)
 	if err != nil {
 		return
 	}
-	pd.bitsOffset += uint(numBits)
+	pd.bitsOffset += numBits
 
 	pd.bitCarry()
 	perTrace(1, perBitLog(uint64(numBits), pd.byteOffset, pd.bitsOffset, dstBytes))
@@ -128,7 +125,6 @@ func (pd *perBitData) getBitsValue(numBits uint) (value uint64, err error) {
 }
 
 func (pd *perBitData) parseAlignBits() error {
-
 	if (pd.bitsOffset & 0x7) > 0 {
 		alignBits := 8 - ((pd.bitsOffset) & 0x7)
 		perTrace(2, fmt.Sprintf("Aligning %d bits", alignBits))
@@ -282,16 +278,15 @@ func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperB
 			}
 			perTrace(1, perBitLog(uint64(ub), pd.byteOffset, pd.bitsOffset, bitString.Bytes))
 		} else {
-			if byte, err := pd.getBitString(uint(ub)); err != nil {
+			if bytes, err := pd.getBitString(uint(ub)); err != nil {
 				logger.AperLog.Warnf("PD GetBitString error: %+v", err)
 				return bitString, err
 			} else {
-				bitString.Bytes = byte
+				bitString.Bytes = bytes
 			}
 		}
 		perTrace(2, fmt.Sprintf("Decoded BIT STRING (length = %d): %0.8b", ub, bitString.Bytes))
 		return bitString, nil
-
 	}
 	repeat := false
 	for {
@@ -334,6 +329,7 @@ func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperB
 	}
 	return bitString, nil
 }
+
 func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (
 	OctetString, error) {
 	var lb, ub, sizeRange int64 = 0, -1, -1
@@ -375,7 +371,6 @@ func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, uppe
 		}
 		perTrace(2, fmt.Sprintf("Decoded OCTET STRING (length = %d): 0x%0x", ub, octetString))
 		return octetString, nil
-
 	}
 	repeat := false
 	for {
@@ -540,7 +535,6 @@ func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upper
 	}
 	perTrace(2, fmt.Sprintf("Decoded ENUMERATED Value : %d", value))
 	return
-
 }
 
 func (pd *perBitData) parseSequenceOf(sizeExtensed bool, params fieldParameters, sliceType reflect.Type) (
@@ -612,6 +606,7 @@ func (pd *perBitData) getChoiceIndex(extensed bool, upperBoundPtr *int64) (prese
 	}
 	return
 }
+
 func getReferenceFieldValue(v reflect.Value) (value int64, err error) {
 	fieldType := v.Type()
 	switch v.Kind() {
@@ -637,7 +632,6 @@ func getReferenceFieldValue(v reflect.Value) (value int64, err error) {
 }
 
 func (pd *perBitData) parseOpenType(v reflect.Value, params fieldParameters) error {
-
 	pdOpenType := &perBitData{[]byte(""), 0, 0}
 	repeat := false
 	for {
@@ -875,7 +869,6 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 			perTrace(2, fmt.Sprintf("Decoded PrintableString : \"%s\"", printableString))
 			return nil
 		}
-
 	}
 	return fmt.Errorf("unsupported: " + v.Type().String())
 }
@@ -935,5 +928,4 @@ func UnmarshalWithParams(b []byte, value interface{}, params string) error {
 	v := reflect.ValueOf(value).Elem()
 	pd := &perBitData{b, 0, 0}
 	return parseField(v, pd, parseFieldParameters(params))
-
 }
