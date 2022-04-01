@@ -131,8 +131,12 @@ func (pd *perBitData) parseAlignBits() error {
 		if val, err := pd.getBitsValue(alignBits); err != nil {
 			return err
 		} else if val != 0 {
-			perTrace(2, "Align Bit is not zero")
-			perTrace(1, perBitLog(uint64(alignBits), pd.byteOffset, pd.bitsOffset, val))
+			if skipPaddingCheck {
+				perTrace(2, "Align Bit is not zero")
+				perTrace(1, perBitLog(uint64(alignBits), pd.byteOffset, pd.bitsOffset, val))
+			} else {
+				return fmt.Errorf("Align Bit is not zero")
+			}
 		}
 	} else if pd.bitsOffset != 0 {
 		pd.bitCarry()
