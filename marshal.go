@@ -182,7 +182,8 @@ func (pd *perRawBitData) appendLength(sizeRange int64, value uint64) (err error)
 }
 
 func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extensive bool,
-	lowerBoundPtr *int64, upperBoundPtr *int64) error {
+	lowerBoundPtr *int64, upperBoundPtr *int64,
+) error {
 	var err error
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if lowerBoundPtr != nil {
@@ -273,7 +274,8 @@ func (pd *perRawBitData) appendBitString(bytes []byte, bitsLength uint64, extens
 }
 
 func (pd *perRawBitData) appendOctetString(bytes []byte, extensive bool, lowerBoundPtr *int64,
-	upperBoundPtr *int64) error {
+	upperBoundPtr *int64,
+) error {
 	byteLen := uint64(len(bytes))
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if lowerBoundPtr != nil {
@@ -478,7 +480,8 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 }
 
 func (pd *perRawBitData) appendEnumerated(value uint64, extensive bool, lowerBoundPtr *int64,
-	upperBoundPtr *int64) error {
+	upperBoundPtr *int64,
+) error {
 	if lowerBoundPtr == nil || upperBoundPtr == nil {
 		return fmt.Errorf("ENUMERATED value constraint is error")
 	}

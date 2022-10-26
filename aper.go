@@ -336,7 +336,8 @@ func (pd *perBitData) parseBitString(extensed bool, lowerBoundPtr *int64, upperB
 }
 
 func (pd *perBitData) parseOctetString(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (
-	OctetString, error) {
+	OctetString, error,
+) {
 	var lb, ub, sizeRange int64 = 0, -1, -1
 	if !extensed {
 		if lowerBoundPtr != nil {
@@ -514,7 +515,8 @@ func (pd *perBitData) parseInteger(extensed bool, lowerBoundPtr *int64, upperBou
 }
 
 func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upperBoundPtr *int64) (value uint64,
-	err error) {
+	err error,
+) {
 	if lowerBoundPtr == nil || upperBoundPtr == nil {
 		err = fmt.Errorf("ENUMERATED value constraint is error")
 		return
@@ -543,7 +545,8 @@ func (pd *perBitData) parseEnumerated(extensed bool, lowerBoundPtr *int64, upper
 }
 
 func (pd *perBitData) parseSequenceOf(sizeExtensed bool, params fieldParameters, sliceType reflect.Type) (
-	reflect.Value, error) {
+	reflect.Value, error,
+) {
 	var sliceContent reflect.Value
 	var lb int64 = 0
 	var sizeRange int64
