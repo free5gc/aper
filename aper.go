@@ -43,6 +43,9 @@ func GetBitString(srcBytes []byte, bitsOffset uint, numBits uint) (dstBytes []by
 	byteLen := (bitsOffset + numBits + 7) >> 3
 	numBitsByteLen := (numBits + 7) >> 3
 	dstBytes = make([]byte, numBitsByteLen)
+	if numBitsByteLen == 0 {
+		return
+	}
 	numBitsMask := byte(0xff)
 	if modEight := numBits & 0x7; modEight != 0 {
 		numBitsMask <<= uint8(8 - (modEight))
