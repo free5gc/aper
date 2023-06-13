@@ -505,6 +505,8 @@ var integerTestData = []testData{
 	{[]byte{0x01, 0x03}, intTest1Data[0]},
 	{[]byte{0x03, 0x05, 0x16, 0x15}, intTest1Data[1]},
 	{[]byte{0x03, 0xFA, 0xE9, 0xEB}, intTest1Data[2]},
+	// I don't know if I should treat it as an error in this case.
+	{[]byte{0x00}, intTest1{0}},
 	{[]byte{0x00}, intTest2Data[0]},
 	{[]byte{0x14}, intTest3Data[0]},
 	{[]byte{0x18}, intTest3Data[1]},
