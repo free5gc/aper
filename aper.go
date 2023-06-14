@@ -642,7 +642,7 @@ func getReferenceFieldValue(v reflect.Value) (value int64, err error) {
 	return
 }
 
-func (pd *perBitData) parseOpenType(v reflect.Value, params fieldParameters) error {
+func (pd *perBitData) parseOpenType(skip bool, v reflect.Value, params fieldParameters) error {
 	pdOpenType := &perBitData{[]byte(""), 0, 0}
 	repeat := false
 	for {
@@ -670,10 +670,15 @@ func (pd *perBitData) parseOpenType(v reflect.Value, params fieldParameters) err
 			break
 		}
 	}
-	perTrace(2, fmt.Sprintf("Decoding OpenType %s with (len = %d byte)", v.Type().String(), len(pdOpenType.bytes)))
-	err := parseField(v, pdOpenType, params)
-	perTrace(2, fmt.Sprintf("Decoded OpenType %s", v.Type().String()))
-	return err
+	if skip {
+		perTrace(2, fmt.Sprintf("Skip OpenType (len = %d byte)", len(pdOpenType.bytes)))
+		return nil
+	} else {
+		perTrace(2, fmt.Sprintf("Decoding OpenType %s with (len = %d byte)", v.Type().String(), len(pdOpenType.bytes)))
+		err := parseField(v, pdOpenType, params)
+		perTrace(2, fmt.Sprintf("Decoded OpenType %s", v.Type().String()))
+		return err
+	}
 }
 
 // parseField is the main parsing function. Given a byte slice and an offset
@@ -802,13 +807,15 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 					}
 				}
 				if present == 0 {
-					return fmt.Errorf("OpenType reference value does not match any field")
+					val.Field(0).SetInt(0)
+					perTrace(2, "OpenType reference value does not match any field")
+					return pd.parseOpenType(true, reflect.Value{}, fieldParameters{})
 				} else if present >= structType.NumField() {
 					return fmt.Errorf("OpenType Present is bigger than number of struct field")
 				} else {
 					val.Field(0).SetInt(int64(present))
 					perTrace(2, fmt.Sprintf("Decoded Present index of OpenType is %d ", present))
-					return pd.parseOpenType(val.Field(present), structParams[present])
+					return pd.parseOpenType(false, val.Field(present), structParams[present])
 				}
 			} else {
 				if presentTmp, err := pd.getChoiceIndex(valueExtensible, params.valueUpperBound); err != nil {
@@ -915,17 +922,17 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 //
 // The following tags on struct fields have special meaning to Unmarshal:
 //
-//	optional        	OPTIONAL tag in SEQUENCE
-//	sizeExt             specifies that size  is extensible
-//	valueExt            specifies that value is extensible
-//	sizeLB		        set the minimum value of size constraint
-//	sizeUB              set the maximum value of value constraint
-//	valueLB		        set the minimum value of size constraint
-//	valueUB             set the maximum value of value constraint
-//	default             sets the default value
-//	openType            specifies the open Type
-//  referenceFieldName	the string of the reference field for this type (only if openType used)
-//  referenceFieldValue	the corresponding value of the reference field for this type (only if openType used)
+//		optional        	OPTIONAL tag in SEQUENCE
+//		sizeExt             specifies that size  is extensible
+//		valueExt            specifies that value is extensible
+//		sizeLB		        set the minimum value of size constraint
+//		sizeUB              set the maximum value of value constraint
+//		valueLB		        set the minimum value of size constraint
+//		valueUB             set the maximum value of value constraint
+//		default             sets the default value
+//		openType            specifies the open Type
+//	 referenceFieldName	the string of the reference field for this type (only if openType used)
+//	 referenceFieldValue	the corresponding value of the reference field for this type (only if openType used)
 //
 // Other ASN.1 types are not supported; if it encounters them,
 // Unmarshal returns a parse error.
