@@ -769,21 +769,19 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 	case reflect.Struct:
 
 		structType := fieldType
-		var structParams []fieldParameters
+		structField, err := structFieldCache.load(structType)
+		if err != nil {
+			return err
+		}
 		var optionalCount uint
 		var optionalPresents uint64
 
 		// pass tag for optional
-		for i := 0; i < structType.NumField(); i++ {
-			if structType.Field(i).PkgPath != "" {
-				return fmt.Errorf("struct contains unexported fields : " + structType.Field(i).PkgPath)
-			}
-			tempParams := parseFieldParameters(structType.Field(i).Tag.Get("aper"))
+		for i := 0; i < len(structField); i++ {
 			// for optional flag
-			if tempParams.optional {
+			if structField[i].FieldParameters.optional {
 				optionalCount++
 			}
-			structParams = append(structParams, tempParams)
 		}
 
 		if optionalCount > 0 {
@@ -796,7 +794,7 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 		}
 
 		// CHOICE or OpenType
-		if structType.NumField() > 0 && structType.Field(0).Name == "Present" {
+		if len(structField) > 0 && structField[0].FieldName == "Present" {
 			var present int = 0
 			if params.openType {
 				if params.referenceFieldValue == nil {
@@ -804,11 +802,11 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 				}
 				refValue := *params.referenceFieldValue
 
-				for j, param := range structParams {
+				for j, param := range structField {
 					if j == 0 {
 						continue
 					}
-					if param.referenceFieldValue != nil && *param.referenceFieldValue == refValue {
+					if param.FieldParameters.referenceFieldValue != nil && *param.FieldParameters.referenceFieldValue == refValue {
 						present = j
 						break
 					}
@@ -817,12 +815,12 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 					val.Field(0).SetInt(0)
 					perTrace(2, "OpenType reference value does not match any field")
 					return pd.parseOpenType(true, reflect.Value{}, fieldParameters{})
-				} else if present >= structType.NumField() {
+				} else if present >= len(structField) {
 					return fmt.Errorf("OpenType Present is bigger than number of struct field")
 				} else {
 					val.Field(0).SetInt(int64(present))
 					perTrace(2, "Decoded Present index of OpenType is %d ", present)
-					return pd.parseOpenType(false, val.Field(present), structParams[present])
+					return pd.parseOpenType(false, val.Field(present), structField[present].FieldParameters)
 				}
 			} else {
 				if presentTmp, err := pd.getChoiceIndex(valueExtensible, params.valueUpperBound); err != nil {
@@ -833,44 +831,45 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) error {
 				val.Field(0).SetInt(int64(present))
 				if present == 0 {
 					return fmt.Errorf("CHOICE present is 0(present's field number)")
-				} else if present >= structType.NumField() {
+				} else if present >= len(structField) {
 					return fmt.Errorf("CHOICE Present is bigger than number of struct field")
 				} else {
-					return parseField(val.Field(present), pd, structParams[present])
+					return parseField(val.Field(present), pd, structField[present].FieldParameters)
 				}
 			}
 		}
 
-		for i := 0; i < structType.NumField(); i++ {
-			if structParams[i].optional && optionalCount > 0 {
+		for i := 0; i < len(structField); i++ {
+			if structField[i].FieldParameters.optional && optionalCount > 0 {
 				optionalCount--
 				if optionalPresents&(1<<optionalCount) == 0 {
-					perTrace(3, "Field \"%s\" in %s is OPTIONAL and not present", structType.Field(i).Name, structType)
+					perTrace(3, "Field \"%s\" in %s is OPTIONAL and not present", structField[i].FieldName, structType)
 					continue
 				} else {
-					perTrace(3, "Field \"%s\" in %s is OPTIONAL and present", structType.Field(i).Name, structType)
+					perTrace(3, "Field \"%s\" in %s is OPTIONAL and present", structField[i].FieldName, structType)
 				}
 			}
 			// for open type reference
-			if structParams[i].openType {
-				fieldName := structParams[i].referenceFieldName
+			tempFieldParameters := structField[i].FieldParameters
+			if tempFieldParameters.openType {
+				fieldName := tempFieldParameters.referenceFieldName
 				var index int
 				for index = 0; index < i; index++ {
-					if structType.Field(index).Name == fieldName {
+					if structField[index].FieldName == fieldName {
 						break
 					}
 				}
 				if index == i {
 					return fmt.Errorf("Open type is not reference to the other field in the struct")
 				}
-				structParams[i].referenceFieldValue = new(int64)
+				tempFieldParameters.referenceFieldValue = new(int64)
 				if referenceFieldValue, err := getReferenceFieldValue(val.Field(index)); err != nil {
 					return err
 				} else {
-					*structParams[i].referenceFieldValue = referenceFieldValue
+					*tempFieldParameters.referenceFieldValue = referenceFieldValue
 				}
 			}
-			if err := parseField(val.Field(i), pd, structParams[i]); err != nil {
+			if err := parseField(val.Field(i), pd, tempFieldParameters); err != nil {
 				return err
 			}
 		}

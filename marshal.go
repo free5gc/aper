@@ -678,7 +678,10 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 	case reflect.Struct:
 
 		structType := fieldType
-		var structParams []fieldParameters
+		structField, err := structFieldCache.load(structType)
+		if err != nil {
+			return err
+		}
 		var optionalCount uint
 		var optionalPresents uint64
 		var sequenceType bool
@@ -689,16 +692,12 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 				return err
 			}
 		}
-		sequenceType = (structType.NumField() <= 0 || structType.Field(0).Name != "Present")
+		sequenceType = len(structField) <= 0 || structField[0].FieldName != "Present"
 		// pass tag for optional
-		for i := 0; i < structType.NumField(); i++ {
-			if structType.Field(i).PkgPath != "" {
-				return fmt.Errorf("struct contains unexported fields : " + structType.Field(i).PkgPath)
-			}
-			tempParams := parseFieldParameters(structType.Field(i).Tag.Get("aper"))
-			if sequenceType {
+		if sequenceType {
+			for i := 0; i < len(structField); i++ {
 				// for optional flag
-				if tempParams.optional {
+				if structField[i].FieldParameters.optional {
 					optionalCount++
 					optionalPresents <<= 1
 					if !v.Field(i).IsNil() {
@@ -708,8 +707,6 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 					return fmt.Errorf("nil element in SEQUENCE type")
 				}
 			}
-
-			structParams = append(structParams, tempParams)
 		}
 		if optionalCount > 0 {
 			perTrace(2, "putting optional(%d), optionalPresents is %0b", optionalCount, optionalPresents)
@@ -723,7 +720,7 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 			present := int(v.Field(0).Int())
 			if present == 0 {
 				return fmt.Errorf("CHOICE or OpenType present is 0(present's field number)")
-			} else if present >= structType.NumField() {
+			} else if present >= len(structField) {
 				return fmt.Errorf("Present is bigger than number of struct field")
 			} else if params.openType {
 				if params.referenceFieldValue == nil {
@@ -731,18 +728,18 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 				}
 				refValue := *params.referenceFieldValue
 
-				if structParams[present].referenceFieldValue == nil || *structParams[present].referenceFieldValue != refValue {
+				if structField[present].FieldParameters.referenceFieldValue == nil || *structField[present].FieldParameters.referenceFieldValue != refValue {
 					return fmt.Errorf("reference value and present reference value is not match")
 				}
 				perTrace(2, "Encoding Present index of OpenType is %d ", present)
-				if err := pd.appendOpenType(val.Field(present), structParams[present]); err != nil {
+				if err := pd.appendOpenType(val.Field(present), structField[present].FieldParameters); err != nil {
 					return err
 				}
 			} else {
 				if err := pd.appendChoiceIndex(present, params.valueExtensible, params.valueUpperBound); err != nil {
 					return err
 				}
-				if err := pd.makeField(val.Field(present), structParams[present]); err != nil {
+				if err := pd.makeField(val.Field(present), structField[present].FieldParameters); err != nil {
 					return err
 				}
 			}
@@ -751,35 +748,36 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 
 		for i := 0; i < structType.NumField(); i++ {
 			// optional
-			if structParams[i].optional && optionalCount > 0 {
+			if structField[i].FieldParameters.optional && optionalCount > 0 {
 				optionalCount--
 				if optionalPresents&(1<<optionalCount) == 0 {
-					perTrace(3, "Field \"%s\" in %s is OPTIONAL and not present", structType.Field(i).Name, structType)
+					perTrace(3, "Field \"%s\" in %s is OPTIONAL and not present", structField[i].FieldName, structType)
 					continue
 				} else {
-					perTrace(3, "Field \"%s\" in %s is OPTIONAL and present", structType.Field(i).Name, structType)
+					perTrace(3, "Field \"%s\" in %s is OPTIONAL and present", structField[i].FieldName, structType)
 				}
 			}
 			// for open type reference
-			if structParams[i].openType {
-				fieldName := structParams[i].referenceFieldName
+			tempFieldParameters := structField[i].FieldParameters
+			if tempFieldParameters.openType {
+				fieldName := tempFieldParameters.referenceFieldName
 				var index int
 				for index = 0; index < i; index++ {
-					if structType.Field(index).Name == fieldName {
+					if structField[index].FieldName == fieldName {
 						break
 					}
 				}
 				if index == i {
 					return fmt.Errorf("Open type is not reference to the other field in the struct")
 				}
-				structParams[i].referenceFieldValue = new(int64)
+				tempFieldParameters.referenceFieldValue = new(int64)
 				if value, err := getReferenceFieldValue(val.Field(index)); err != nil {
 					return err
 				} else {
-					*structParams[i].referenceFieldValue = value
+					*tempFieldParameters.referenceFieldValue = value
 				}
 			}
-			if err := pd.makeField(val.Field(i), structParams[i]); err != nil {
+			if err := pd.makeField(val.Field(i), tempFieldParameters); err != nil {
 				return err
 			}
 		}

@@ -24,6 +24,11 @@ type fieldParameters struct {
 // parseFieldParameters will parse it into a fieldParameters structure,
 // ignoring unknown parts of the string. TODO:PrintableString
 func parseFieldParameters(str string) (params fieldParameters) {
+	vAny, ok := fieldParametersCache.Load(str)
+	if ok {
+		return vAny.(fieldParameters)
+	}
+
 	for _, part := range strings.Split(str, ",") {
 		switch {
 		case part == "optional":
@@ -74,5 +79,8 @@ func parseFieldParameters(str string) (params fieldParameters) {
 			}
 		}
 	}
+
+	fieldParametersCache.Store(str, params)
+
 	return params
 }
