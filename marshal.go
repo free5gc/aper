@@ -2,9 +2,10 @@ package aper
 
 import (
 	"fmt"
-	"github.com/free5gc/aper/logger"
 	"log"
 	"reflect"
+
+	"github.com/free5gc/aper/logger"
 )
 
 type perRawBitData struct {
@@ -728,7 +729,8 @@ func (pd *perRawBitData) makeField(v reflect.Value, params fieldParameters) erro
 				}
 				refValue := *params.referenceFieldValue
 
-				if structField[present].FieldParameters.referenceFieldValue == nil || *structField[present].FieldParameters.referenceFieldValue != refValue {
+				if structField[present].FieldParameters.referenceFieldValue == nil ||
+					*structField[present].FieldParameters.referenceFieldValue != refValue {
 					return fmt.Errorf("reference value and present reference value is not match")
 				}
 				perTrace(2, "Encoding Present index of OpenType is %d ", present)

@@ -6,8 +6,10 @@ import (
 	"sync"
 )
 
-var fieldParametersCache sync.Map
-var structFieldCache structFieldCacheT
+var (
+	fieldParametersCache sync.Map
+	structFieldCache     structFieldCacheT
+)
 
 type structFieldCacheT struct {
 	m sync.Map
