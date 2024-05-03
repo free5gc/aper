@@ -154,7 +154,7 @@ func (pd *perBitData) parseConstraintValue(valueRange int64) (value uint64, err 
 	if valueRange <= 255 {
 		if valueRange < 0 {
 			err = fmt.Errorf("Value range is negative")
-			return
+			return value, err
 		}
 		var i uint
 		// 1 ~ 8 bits
@@ -165,17 +165,17 @@ func (pd *perBitData) parseConstraintValue(valueRange int64) (value uint64, err 
 			}
 		}
 		value, err = pd.getBitsValue(i)
-		return
+		return value, err
 	} else if valueRange == 256 {
 		bytes = 1
 	} else if valueRange <= 65536 {
 		bytes = 2
 	} else {
 		err = fmt.Errorf("Constraint Value is large than 65536")
-		return
+		return value, err
 	}
 	if err = pd.parseAlignBits(); err != nil {
-		return
+		return value, err
 	}
 	value, err = pd.getBitsValue(bytes * 8)
 	return value, err
@@ -222,27 +222,27 @@ func (pd *perBitData) parseLength(sizeRange int64, repeat *bool) (value uint64, 
 	}
 
 	if err = pd.parseAlignBits(); err != nil {
-		return
+		return value, err
 	}
 	firstByte, err := pd.getBitsValue(8)
 	if err != nil {
-		return
+		return value, err
 	}
 	if (firstByte & 128) == 0 { // #10.9.3.6
 		value = firstByte & 0x7F
-		return
+		return value, err
 	} else if (firstByte & 64) == 0 { // #10.9.3.7
 		var secondByte uint64
 		if secondByte, err = pd.getBitsValue(8); err != nil {
-			return
+			return value, err
 		}
 		value = ((firstByte & 63) << 8) | secondByte
-		return
+		return value, err
 	}
 	firstByte &= 63
 	if firstByte < 1 || firstByte > 4 {
 		err = fmt.Errorf("Parse Length Out of Constraint")
-		return
+		return value, err
 	}
 	*repeat = true
 	value = 16384 * firstByte
