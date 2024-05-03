@@ -42,3 +42,7 @@ func SetReportCaller(enable bool) {
 	AperLog.Infoln("set report call :", enable)
 	log.SetReportCaller(enable)
 }
+
+func IsLevelEnabledDebug() bool {
+	return AperLog.Logger.IsLevelEnabled(logrus.DebugLevel)
+}
