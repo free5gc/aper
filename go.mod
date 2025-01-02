@@ -3,8 +3,8 @@ module github.com/free5gc/aper
 go 1.21
 
 require (
-	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.8.3
+	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.9.0
 	github.com/tim-ywliu/nested-logrus-formatter v1.3.2
 )
 
