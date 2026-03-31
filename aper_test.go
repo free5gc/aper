@@ -581,6 +581,46 @@ func TestStructInteger(t *testing.T) {
 	}
 }
 
+type intMarshalRegressionLargeRange4096To131071 struct {
+	Value int64 `aper:"valueLB:4096,valueUB:131071"`
+}
+
+type intMarshalRegressionLargeRange0To100000 struct {
+	Value int64 `aper:"valueLB:0,valueUB:100000"`
+}
+
+func TestMarshalIntegerLengthRegression(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected []byte
+	}{
+		{
+			name:     "range_4096_131071_value_5000",
+			input:    intMarshalRegressionLargeRange4096To131071{Value: 5000},
+			expected: []byte{0x40, 0x03, 0x88},
+		},
+		{
+			name:     "range_0_100000_value_65535",
+			input:    intMarshalRegressionLargeRange0To100000{Value: 65535},
+			expected: []byte{0x40, 0xFF, 0xFF},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			encoded, err := Marshal(tc.input)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, encoded)
+
+			out := reflect.New(reflect.TypeOf(tc.input))
+			err = Unmarshal(encoded, out.Interface())
+			assert.NoError(t, err)
+			assert.Equal(t, tc.input, out.Elem().Interface())
+		})
+	}
+}
+
 // TEST ENUMERATED
 
 // value is unconstraint

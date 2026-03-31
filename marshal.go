@@ -453,7 +453,7 @@ func (pd *perRawBitData) appendInteger(value int64, extensive bool, lowerBoundPt
 		unsignedValueRange := uint64(valueRange - 1)
 		for byteLen = 1; byteLen <= 127; byteLen++ {
 			unsignedValueRange >>= 8
-			if unsignedValueRange <= 1 {
+			if unsignedValueRange == 0 {
 				break
 			}
 		}
